@@ -1,2 +1,2 @@
-# package marker for app
-# (empty)
+# Minimal package marker for `app`
+__all__ = []

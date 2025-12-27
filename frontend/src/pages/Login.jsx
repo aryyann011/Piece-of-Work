@@ -12,20 +12,26 @@ const Login = () => {
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError("");
-    setIsSubmitting(true);
 
-    try {
-      await login(email, password, regNo);
-      navigate("/"); // Redirect to Dashboard on success
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setIsSubmitting(false);
+const handleJoin = async (e) => {
+  e.preventDefault();
+  setError("");
+  
+  try {
+    const result = await registerStudent(email, password, regNo);
+    
+    if (result.status === "reclaim") {
+      alert("⚠️ " + result.message); 
+    } else {
+      alert("✅ " + result.message);
     }
-  };
+    
+    setIsLoginMode(true); 
+
+  } catch (err) {
+    setError(err.message);
+  }
+};
 
   return (
     <div style={styles.container}>

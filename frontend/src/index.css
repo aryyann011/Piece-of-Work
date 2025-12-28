@@ -66,3 +66,112 @@ button:focus-visible {
     background-color: #f9f9f9;
   }
 }
+
+:root {
+  --bg-dark: #0a0b1e;
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --neon-blue: #00d4ff;
+  --neon-pink: #ff007f;
+  --glass-surface: rgba(20, 22, 40, 0.6);
+}
+
+body {
+  margin: 0;
+  background-color: var(--bg-dark);
+  font-family: 'Inter', system-ui, sans-serif;
+  color: white;
+  overflow: hidden; /* Prevent scroll on mobile */
+}
+
+/* The Glassmorphism Utility */
+.glass-panel {
+  background: var(--glass-surface);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+}
+
+/* Neon Glow Animation */
+@keyframes pulse-glow {
+  0% { box-shadow: 0 0 10px rgba(0, 212, 255, 0.2); }
+  50% { box-shadow: 0 0 25px rgba(0, 212, 255, 0.5); }
+  100% { box-shadow: 0 0 10px rgba(0, 212, 255, 0.2); }
+}
+
+:root {
+  --bg-dark: #050511; /* Deeper, richer black-blue */
+  --neon-blue: #00d4ff;
+  --neon-pink: #ff007f;
+}
+
+body {
+  margin: 0;
+  background-color: var(--bg-dark);
+  font-family: 'Inter', system-ui, sans-serif;
+  color: white;
+  overflow: hidden;
+}
+
+/* THE MAGIC: Ambient Background Blobs */
+.ambient-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px); /* This makes it look like a glow */
+  opacity: 0.4;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.orb-1 {
+  top: -10%;
+  left: -10%;
+  width: 500px;
+  height: 500px;
+  background: radial-gradient(circle, var(--neon-blue), transparent 70%);
+  animation: float 10s infinite ease-in-out;
+}
+
+.orb-2 {
+  bottom: -10%;
+  right: -10%;
+  width: 400px;
+  height: 400px;
+  background: radial-gradient(circle, var(--neon-pink), transparent 70%);
+  animation: float 14s infinite ease-in-out reverse;
+}
+
+@keyframes float {
+  0% { transform: translate(0, 0); }
+  50% { transform: translate(30px, 50px); }
+  100% { transform: translate(0, 0); }
+}
+:root {
+  --bg-dark: #0b0c15; /* Deep Navy Black */
+  --panel-bg: #13141f; /* Slightly lighter for cards */
+  --neon-pink: #ff2a6d;
+  --neon-blue: #05d9e8;
+  --text-main: #ffffff;
+  --text-muted: #6c757d;
+}
+
+body {
+  margin: 0;
+  background-color: var(--bg-dark);
+  font-family: 'Inter', sans-serif;
+  color: var(--text-main);
+  overflow: hidden;
+}
+
+/* The Dashboard Card Style */
+.dashboard-card {
+  background: var(--panel-bg);
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+  overflow: hidden;
+}
+
+.glow-text {
+  text-shadow: 0 0 10px rgba(255, 42, 109, 0.5);
+}

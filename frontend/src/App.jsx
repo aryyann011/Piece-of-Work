@@ -5,11 +5,21 @@ import Discovery from "./pages/Discovery";
 import Login from "./pages/Login"; 
 
 // 1. The Bouncer (Security Check)
+// This sits here so we don't need a separate file for it
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useAuth();
   
   if (loading) {
-     return <div style={{ height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: "white", background: "#0b0c15" }}>Loading Campus...</div>;
+     return (
+       <div style={{ 
+          height: "100vh", width: "100vw", 
+          display: "flex", alignItems: "center", justifyContent: "center", 
+          background: "#0b0c15", color: "#00d4ff", 
+          fontFamily: "sans-serif", letterSpacing: "2px"
+       }}>
+          LOADING CAMPUS...
+       </div>
+     );
   }
   
   if (!user) {
@@ -19,15 +29,15 @@ const ProtectedRoute = ({ children }) => {
   return children;
 };
 
+// 2. The Main App Logic
 function App() {
   return (
     <AuthProvider>
       <Routes>
-        {/* 1. PUBLIC ROUTE: Login */}
+        {/* PUBLIC: Login */}
         <Route path="/login" element={<LoginWrapper />} />
 
-        {/* 2. PROTECTED ROUTES (The App) */}
-        {/* We wrap the Layout in ProtectedRoute so the Sidebar is also hidden from outsiders */}
+        {/* PROTECTED: The Dashboard */}
         <Route 
           element={
             <ProtectedRoute>
@@ -35,11 +45,13 @@ function App() {
             </ProtectedRoute>
           }
         >
-          {/* Dashboard Pages */}
+          {/* These render INSIDE the Layout's <Outlet/> */}
           <Route path="/" element={<Discovery />} />
-          <Route path="/chat" element={<div style={{color:'white', padding:'40px'}}>Chat Feed Coming Soon</div>} />
-          <Route path="/find" element={<div style={{color:'white', padding:'40px'}}>Search People Coming Soon</div>} />
-          <Route path="/settings" element={<div style={{color:'white', padding:'40px'}}>Settings Page</div>} />
+          
+          {/* Placeholders for sidebar links */}
+          <Route path="/chat" element={<Placeholder title="Chat Feed" />} />
+          <Route path="/find" element={<Placeholder title="Find People" />} />
+          <Route path="/settings" element={<Placeholder title="Settings" />} />
         </Route>
 
         {/* Catch-all */}
@@ -49,11 +61,20 @@ function App() {
   );
 }
 
-// Helper to redirect logged-in users away from Login page
+// Helper: Redirects logged-in users to Dashboard if they try to go to /login
 const LoginWrapper = () => {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
+  if (loading) return null; // Wait for check
   if (user) return <Navigate to="/" />;
   return <Login />;
 };
+
+// Helper: Simple Placeholder for empty pages
+const Placeholder = ({ title }) => (
+  <div style={{ padding: "50px", color: "white", textAlign: "center" }}>
+    <h1 style={{ color: "#00d4ff" }}>{title}</h1>
+    <p style={{ opacity: 0.7 }}>Coming Soon</p>
+  </div>
+);
 
 export default App;

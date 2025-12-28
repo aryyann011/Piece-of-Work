@@ -1,7 +1,16 @@
 import { Outlet, useLocation, Link } from "react-router-dom";
-import { Search, MessageSquare, Users, Settings, LogOut, Hexagon } from "lucide-react"; 
+import { Search, MessageSquare, Users, Settings, LogOut, Hexagon } from "lucide-react";
+import { useNavigate } from "react-router-dom"; 
+import { useAuth } from "../context/mainContext";
 
 const Layout = () => {
+    const { logout } = useAuth(); // <--- Get logout function
+  const navigate = useNavigate(); // <--- Hook to redirect
+
+  const handleLogout = async () => {
+      await logout();
+      navigate("/login"); // Force redirect to login page
+  };
   return (
     <div style={{ display: "flex", height: "100vh", width: "100vw", padding: "20px", boxSizing: "border-box", gap: "20px" }}>
       
@@ -26,11 +35,14 @@ const Layout = () => {
         </nav>
 
         {/* Bottom Action */}
-        <button style={{ 
-            marginTop: "auto", display: "flex", alignItems: "center", gap: "10px", 
-            padding: "12px", background: "rgba(255, 42, 109, 0.1)", color: "#ff2a6d", 
-            border: "1px solid #ff2a6d", borderRadius: "12px", cursor: "pointer", fontWeight: "600"
-        }}>
+        <button 
+            onClick={handleLogout} // <--- The Fix
+            style={{ 
+                marginTop: "auto", display: "flex", alignItems: "center", gap: "10px", 
+                padding: "12px", background: "rgba(255, 42, 109, 0.1)", color: "#ff2a6d", 
+                border: "1px solid #ff2a6d", borderRadius: "12px", cursor: "pointer", fontWeight: "600"
+            }}
+        >
            <LogOut size={18} /> Logout
         </button>
       </aside>

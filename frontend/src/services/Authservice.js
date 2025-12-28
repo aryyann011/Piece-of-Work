@@ -1,11 +1,15 @@
-import { auth, db } from "../conf/firebase";
+import { auth, db } from "../conf/firebase"; // Make sure this path points to your firebase config
 import { 
+  signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
-  sendEmailVerification, 
-  sendPasswordResetEmail, // <--- Import this
   signOut 
-} from "firebase/auth";
-import { doc, getDoc, updateDoc } from "firebase/firestore";
+} from "firebase/auth"; // <--- THIS WAS MISSING
+import { 
+  doc, 
+  getDoc, 
+  updateDoc, 
+  serverTimestamp 
+} from "firebase/firestore";
 
 export const loginStudent = async (email, password, regNo) => {
   // 1. Check if Registration Number exists in Firestore (The Admin Pre-check)
@@ -15,7 +19,7 @@ export const loginStudent = async (email, password, regNo) => {
   if (!docSnap.exists()) {
     throw new Error("Registration number not found! Contact Admin.");
   }
-  
+
   const studentData = docSnap.data();
 
   // 2. Prevent login if already marked as registered (active session)
@@ -34,8 +38,6 @@ export const loginStudent = async (email, password, regNo) => {
     } else {
       throw authError;
     }
-    
-    throw err;
   }
 
   // 4. Success: Update Firestore & LocalStorage

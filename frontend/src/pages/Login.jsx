@@ -35,12 +35,12 @@ const Login = () => {
         <LightPillar
           topColor="#5227FF"
           bottomColor="#FF9FFC"
-          intensity={1.2}
-          rotationSpeed={0.35}
-          glowAmount={0.008}
-          pillarWidth={3.5}
-          pillarHeight={0.5}
-          noiseIntensity={0.6}
+          intensity={1.0}
+          rotationSpeed={0.55}
+          glowAmount={0.001}
+          pillarWidth={4.5}
+          pillarHeight={1.5}
+          noiseIntensity={0.1}
           interactive={false}
         />
       </div>

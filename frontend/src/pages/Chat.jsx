@@ -10,7 +10,7 @@ const INITIAL_CONTACTS = [
 
 const INITIAL_PUBLIC_CHANNELS = [
   { id: "c1", name: "General Campus", topic: "Everything campus related" },
-  { id: "c2", name: "Tech Talk 💻", topic: "Code, AI & Hackathons" },
+  { id: "c2", name: "Tech Talk", topic: "Code, AI & Hackathons" },
   { id: "c3", name: "Events & Fests", topic: "Weekend plans?" },
 ];
 

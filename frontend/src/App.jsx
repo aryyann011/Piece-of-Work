@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from "./context/mainContext";
 import Layout from "./components/Layout"; 
 import Discovery from "./pages/Discovery"; 
 import Login from "./pages/Login"; 
+import Chat from "./pages/Chat";
 
 // 1. The Bouncer (Security Check)
 const ProtectedRoute = ({ children }) => {
@@ -37,14 +38,14 @@ function App() {
         {/* PROTECTED: The Dashboard */}
         <Route 
           element={
-            <ProtectedRoute>
+            // <ProtectedRoute>
               <Layout />
-            </ProtectedRoute>
+            // </ProtectedRoute>
           }
         >
           {/* These render INSIDE the Layout's <Outlet/> */}
           <Route path="/" element={<Discovery />} />
-          <Route path="/chat" element={<Placeholder title="Group Chats" subtitle="Temporary 1-hour rooms" />} />
+          <Route path="/chat" element= {<Chat/>}/>
           <Route path="/find" element={<Placeholder title="Find Friends" subtitle="Swipe to connect" />} />
           <Route path="/settings" element={<Placeholder title="Profile Settings" subtitle="Manage your campus ID" />} />
         </Route>

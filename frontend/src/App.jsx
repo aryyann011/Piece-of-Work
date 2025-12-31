@@ -1,16 +1,17 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/mainContext";
-import Layout from "./components/Layout"; 
-import Discovery from "./pages/Discovery"; 
-import Login from "./pages/Login"; 
+import Layout from "./components/Layout";
+import Discovery from "./pages/Discovery";
+import Login from "./pages/Login";
 import Chat from "./pages/Chat";
 import Find from "./pages/Find";
 import Profile from "./pages/Profile";
+import EditProfile from "./pages/EditProfile";
 
 // 1. The Bouncer (Security Check)
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useAuth();
-  
+
   if (loading) {
     return (
       <div className="h-screen w-screen flex flex-col items-center justify-center bg-slate-950 text-blue-400 font-sans tracking-[0.2em]">
@@ -21,11 +22,11 @@ const ProtectedRoute = ({ children }) => {
       </div>
     );
   }
-  
+
   if (!user) {
     return <Navigate to="/login" replace />; // Use 'replace' to prevent back-button loops
   }
-  
+
   return children;
 };
 
@@ -37,7 +38,7 @@ function App() {
         <Route path="/login" element={<LoginWrapper />} />
 
         {/* PROTECTED: The Dashboard */}
-        <Route 
+        <Route
           element={
             <ProtectedRoute>
               <Layout />

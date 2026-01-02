@@ -1,61 +1,140 @@
 import React, { useState, useEffect } from "react";
 import CardStack from "../components/Cards/CardStack";
 import LightRays from "../components/effects/LightRays";
-import { Search, Hash, Users } from "lucide-react";
+import { Search } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/mainContext";
 
-// Dummy Stack Data
-const DUMMY_USERS = [
-    { uid: "u1", name: "Aisha Rahman", regNo: "2024CS01", major: "CSE", year: "3rd", bio: "Love coding and coffee", photoUrl: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=800&q=80" },
-    { uid: "u2", name: "Rahul Verma", regNo: "2023IT99", major: "IT", year: "4th", bio: "Hackathon junkie", photoUrl: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=800&q=80" },
-    { uid: "u3", name: "Priya Singh", regNo: "2025ECE12", major: "ECE", year: "2nd", bio: "Circuits & Coffee", photoUrl: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=800&q=80" },
-];
+import {
+    collection,
+    getDocs,
+    getDoc,
+    query,
+    where,
+    serverTimestamp,
+    doc,
+    setDoc,
+    updateDoc,
+    deleteDoc,
+    onSnapshot // Added for real-time updates
+} from "firebase/firestore";
+import { db } from "../conf/firebase";
 
 const PUBLIC_GROUPS = [
-    { id: "c1", name: "General Campus", members: 358, topic: "Everything campus related" },
-    { id: "c2", name: "Tech Talk", members: 120, topic: "Code, AI & Hackathons" },
-    { id: "c3", name: "Events & Fests", members: 85, topic: "Weekend plans?" },
-    { id: "c4", name: "Gaming Club", members: 64, topic: "Valo / CS:GO tonight" },
+    { id: "c1", name: "General Campus", members: 358 },
+    { id: "c2", name: "Tech Talk", members: 120 },
+    { id: "c3", name: "Events & Fests", members: 85 },
+    { id: "c4", name: "Gaming Club", members: 64 },
 ];
 
 const Discovery = () => {
     const navigate = useNavigate();
     const { user: authUser } = useAuth();
-    const [isMobile, setIsMobile] = useState(window.innerWidth < 1000);
-    const [users, setUsers] = useState(DUMMY_USERS);
 
+    const [users, setUsers] = useState([]);
+    const [friendRequests, setFriendRequests] = useState([]);
+    const [isMobile, setIsMobile] = useState(window.innerWidth < 1000);
+    const [loading, setLoading] = useState(true);
+
+    // ---------------- 1. FETCH DISCOVERY USERS ----------------
     useEffect(() => {
         const handleResize = () => setIsMobile(window.innerWidth < 1000);
         window.addEventListener("resize", handleResize);
 
         const fetchUsers = async () => {
             try {
-                const res = await fetch('/api/profile');
-                if (res.ok) {
-                    const data = await res.json();
+                // Fetch all potential users
+                const snap = await getDocs(collection(db, "users"));
+                const list = snap.docs
+                    .map(d => ({
+                        uid: d.id,
+                        name: d.data().Name,
+                        major: d.data().DEPT?.toUpperCase(),
+                        bio: d.data().BIO || "",
+                        photoUrl: d.data().photoURL || "",
+                    }))
+                    .filter(u => u.uid !== authUser?.uid);
 
-                    // Redirect to edit profile if current user has no data
-                    if (authUser && (!data.profiles || !data.profiles[authUser.uid])) {
-                        // navigate("/edit-profile"); // Enabled auto-redirect logic
-                    }
-
-                    const realUsers = Object.values(data.profiles || {});
-                    if (realUsers.length > 0) {
-                        setUsers([...realUsers, ...DUMMY_USERS]);
-                    }
-                }
+                setUsers(list);
             } catch (err) {
-                console.error("Error fetching users:", err);
+                console.error("Fetch users error:", err);
+            } finally {
+                setLoading(false);
             }
         };
 
-        fetchUsers();
+        if (authUser) fetchUsers();
         return () => window.removeEventListener("resize", handleResize);
-    }, [authUser, navigate]);
+    }, [authUser]);
 
-    const handleJoinGroup = (group) => {
-        navigate("/chat", { state: { joinPublicChannel: group } });
+    // ---------------- 2. REAL-TIME INCOMING REQUESTS ----------------
+    useEffect(() => {
+        if (!authUser) return;
+
+        // Query for requests sent TO the current user that are still pending
+        const q = query(
+            collection(db, "friend_requests"),
+            where("to", "==", authUser.uid),
+            where("status", "==", "pending")
+        );
+
+        const unsubscribe = onSnapshot(q, (snap) => {
+            const requests = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            setFriendRequests(requests);
+        });
+
+        return () => unsubscribe();
+    }, [authUser]);
+
+    // ---------------- 3. SEND FRIEND REQUEST (SWIPE DOWN) ----------------
+    const sendFriendRequest = async (targetUser) => {
+        if (!authUser || !targetUser?.uid) return;
+        if (authUser.uid === targetUser.uid) return;
+
+        // Standard ID format: "senderUID_receiverUID"
+        const requestId = `${authUser.uid}_${targetUser.uid}`;
+        const reverseId = `${targetUser.uid}_${authUser.uid}`;
+
+        try {
+            // Check if the other person already sent YOU a request
+            const reverseSnap = await getDoc(doc(db, "friend_requests", reverseId));
+            if (reverseSnap.exists()) {
+                alert("This user already sent you a request! Check your requests panel.");
+                return;
+            }
+
+            // Create the request document
+            await setDoc(doc(db, "friend_requests", requestId), {
+                from: authUser.uid,
+                to: targetUser.uid,
+                status: "pending",
+                createdAt: serverTimestamp(),
+            });
+
+            console.log("Request successfully sent to:", targetUser.name);
+        } catch (err) {
+            console.error("Error sending friend request:", err);
+        }
+    };
+
+    // ---------------- 4. ACCEPT / REJECT ----------------
+    const acceptRequest = async (id) => {
+        try {
+            await updateDoc(doc(db, "friend_requests", id), {
+                status: "accepted",
+            });
+            // The onSnapshot listener will automatically remove it from the UI list
+        } catch (err) {
+            console.error("Error accepting request:", err);
+        }
+    };
+
+    const rejectRequest = async (id) => {
+        try {
+            await deleteDoc(doc(db, "friend_requests", id));
+        } catch (err) {
+            console.error("Error rejecting request:", err);
+        }
     };
 
     return (
@@ -65,96 +144,127 @@ const Discovery = () => {
             gridTemplateColumns: "1fr 350px",
             gap: "20px",
             height: "100%",
-            overflowY: isMobile ? "auto" : "hidden",
-            paddingBottom: "20px",
-            boxSizing: "border-box"
+            padding: "20px"
         }}>
-
-            {/* --- COLUMN 1: THE STACK (Center) --- */}
-            <div className="dashboard-card" style={{
-                position: "relative",
-                display: "flex", flexDirection: "column", alignItems: "center",
-                minHeight: isMobile ? "700px" : "0",
-                marginBottom: isMobile ? "20px" : "0",
-                paddingTop: "30px",
-                paddingBottom: isMobile ? "50px" : "0"
-            }}>
-
-                {/* HEADER & SEARCH */}
-                <div style={{ zIndex: 10, width: "100%", padding: "0 30px", marginBottom: "10px" }}>
-                    <div style={{ display: "flex", alignItems: "center", background: "#0b0c15", padding: "10px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.1)", maxWidth: "300px" }}>
-                        <Search size={16} color="#666" style={{ marginRight: "10px" }} />
-                        <input type="text" placeholder="Reg No or Name" style={{ background: "transparent", border: "none", color: "white", width: "100%", outline: "none" }} />
+            {/* LEFT SECTION: DISCOVERY STACK */}
+            <div className="dashboard-card" style={{ position: "relative", paddingTop: "30px", overflow: "hidden" }}>
+                <div style={{ padding: "0 30px", marginBottom: "20px" }}>
+                    <div style={{
+                        display: "flex",
+                        alignItems: "center",
+                        background: "#0b0c15",
+                        padding: "10px",
+                        borderRadius: "8px",
+                        maxWidth: "300px"
+                    }}>
+                        <Search size={16} color="#666" />
+                        <input
+                            placeholder="Reg No or Name"
+                            style={{ background: "transparent", border: "none", color: "white", marginLeft: "10px", outline: "none" }}
+                        />
                     </div>
                 </div>
 
-                {/* THE CARD STACK */}
-                <div style={{
-                    transform: isMobile ? "scale(0.85)" : "scale(0.85)",
-                    transformOrigin: "top center",
-                    width: "100%",
-                    display: "flex",
-                    justifyContent: "center",
-                    marginTop: "10px"
-                }}>
-                    <CardStack
-                        users={users}
-                        onSwipeDown={(u) => console.log("Req:", u.name)}
-                        onSwipeUp={(u) => console.log("Skip:", u.name)}
-                    />
+                <div style={{ transform: "scale(0.9)", display: "flex", justifyContent: "center", height: "500px" }}>
+                    {loading ? (
+                        <p style={{ color: "#aaa" }}>Finding students...</p>
+                    ) : users.length > 0 ? (
+                        <CardStack
+                            users={users}
+                            onSwipeDown={sendFriendRequest} // Triggered when swiped down
+                            onSwipeUp={(u) => console.log("Skipped:", u.name)}
+                        />
+                    ) : (
+                        <p style={{ color: "#777" }}>No more users to discover</p>
+                    )}
                 </div>
 
-                {/* Background Rays */}
-                <div style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", zIndex: 0, opacity: 0.5, pointerEvents: "none" }}>
-                    <LightRays raysColor="#ff2a6d" raysSpeed={1.0} />
-                </div>
+                <LightRays raysColor="#ff2a6d" />
             </div>
 
-            {/* --- COLUMN 2: RIGHT PANEL (Connect Rooms) --- */}
-            <div className="dashboard-card" style={{
-                display: "flex", flexDirection: "column", padding: "20px",
-                minHeight: isMobile ? "400px" : "0",
-                height: isMobile ? "auto" : "100%"
-            }}>
-
-                <div style={{ marginBottom: "20px" }}>
-                    <h3 style={{ margin: "0 0 5px 0", fontSize: "18px", color: "white" }}>Connect Rooms</h3>
-                    <p style={{ margin: 0, color: "#aaa", fontSize: "13px" }}>Join public discussions</p>
-                </div>
-
-                <div style={{ display: "flex", alignItems: "center", background: "#0b0c15", padding: "10px 15px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.1)", marginBottom: "20px" }}>
-                    <Search size={18} color="#6c757d" style={{ marginRight: "10px" }} />
-                    <input type="text" placeholder="Find a community..." style={{ background: "transparent", border: "none", color: "white", outline: "none", width: "100%", fontSize: "14px" }} />
-                </div>
-
-                <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: "10px", paddingRight: "5px" }}>
-                    {PUBLIC_GROUPS.map((group) => (
-                        <div key={group.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "rgba(255,255,255,0.03)", padding: "12px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.05)" }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                                <div style={{ width: "40px", height: "40px", borderRadius: "10px", background: "rgba(5, 217, 232, 0.1)", display: "flex", alignItems: "center", justifyContent: "center", color: "#05d9e8" }}>
-                                    <Hash size={20} />
-                                </div>
-                                <div>
-                                    <div style={{ fontWeight: "600", fontSize: "14px", color: "white" }}>{group.name}</div>
-                                    <div style={{ fontSize: "12px", color: "#666", display: "flex", alignItems: "center", gap: "4px" }}>
-                                        <Users size={10} /> {group.members} Online
-                                    </div>
+            {/* RIGHT SECTION: SIDEBAR */}
+            <div className="dashboard-card" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "20px" }}>
+                <div>
+                    <h3 style={{ color: "white", marginBottom: "15px" }}>Friend Requests</h3>
+                    {friendRequests.length === 0 ? (
+                        <p style={{ color: "#777", fontSize: "14px" }}>No new requests</p>
+                    ) : (
+                        friendRequests.map(req => (
+                            <div key={req.id} style={{
+                                background: "rgba(255,255,255,0.05)",
+                                padding: "12px",
+                                borderRadius: "10px",
+                                marginBottom: "10px",
+                                border: "1px solid rgba(255,255,255,0.1)"
+                            }}>
+                                <p style={{ color: "white", fontSize: "14px", marginBottom: "10px" }}>
+                                    User <span style={{ color: "#ff2a6d" }}>{req.from.slice(0, 5)}...</span> wants to connect
+                                </p>
+                                <div style={{ display: "flex", gap: "10px" }}>
+                                    <button
+                                        onClick={() => acceptRequest(req.id)}
+                                        style={{ 
+                                            flex: 1, 
+                                            background: "#22c55e", 
+                                            border: "none", 
+                                            padding: "8px", 
+                                            borderRadius: "5px", 
+                                            color: "white", 
+                                            cursor: "pointer",
+                                            fontWeight: "bold"
+                                        }}>
+                                        Accept
+                                    </button>
+                                    <button
+                                        onClick={() => rejectRequest(req.id)}
+                                        style={{ 
+                                            flex: 1, 
+                                            background: "#ef4444", 
+                                            border: "none", 
+                                            padding: "8px", 
+                                            borderRadius: "5px", 
+                                            color: "white", 
+                                            cursor: "pointer",
+                                            fontWeight: "bold"
+                                        }}>
+                                        Reject
+                                    </button>
                                 </div>
                             </div>
+                        ))
+                    )}
+                </div>
 
+                <hr style={{ borderColor: "rgba(255,255,255,0.1)" }} />
+
+                <div>
+                    <h3 style={{ color: "white", marginBottom: "15px" }}>Connect Rooms</h3>
+                    {PUBLIC_GROUPS.map(g => (
+                        <div key={g.id} style={{ 
+                            display: "flex", 
+                            justifyContent: "space-between", 
+                            alignItems: "center", 
+                            marginTop: "12px" 
+                        }}>
+                            <div>
+                                <div style={{ color: "white", fontSize: "15px" }}>{g.name}</div>
+                                <div style={{ color: "#777", fontSize: "12px" }}>{g.members} members</div>
+                            </div>
                             <button
-                                onClick={() => handleJoinGroup(group)}
-                                style={{
-                                    padding: "6px 16px", borderRadius: "20px", border: "1px solid rgba(255,255,255,0.2)",
-                                    background: "transparent", color: "white", fontSize: "12px", cursor: "pointer", fontWeight: "600"
-                                }}
-                            >
+                                onClick={() => navigate("/chat")}
+                                style={{ 
+                                    background: "rgba(255,255,255,0.1)", 
+                                    color: "white", 
+                                    border: "1px solid rgba(255,255,255,0.2)",
+                                    padding: "5px 15px",
+                                    borderRadius: "20px",
+                                    cursor: "pointer"
+                                }}>
                                 Join
                             </button>
                         </div>
                     ))}
                 </div>
-
             </div>
         </div>
     );

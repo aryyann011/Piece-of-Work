@@ -29,16 +29,16 @@ const Requests = () => {
 
     // 1. Pending Requests (Incoming)
     const qPending = query(
-        collection(db, "friend_requests"), 
-        where("to", "==", user.uid), 
-        where("status", "==", "pending")
+      collection(db, "friend_requests"),
+      where("to", "==", user.uid),
+      where("status", "==", "pending")
     );
 
     // 2. Accepted Requests (Incoming)
     const qAccepted = query(
-        collection(db, "friend_requests"), 
-        where("to", "==", user.uid), 
-        where("status", "==", "accepted")
+      collection(db, "friend_requests"),
+      where("to", "==", user.uid),
+      where("status", "==", "accepted")
     );
 
     const unsubPending = onSnapshot(qPending, (snap) => processSnapshot(snap, setPendingRequests));
@@ -55,13 +55,13 @@ const Requests = () => {
         let bio = "";
 
         try {
-            const docSnap = await getDoc(doc(db, "users", targetId));
-            if (docSnap.exists()) {
-                const d = docSnap.data();
-                name = d.Name || "Unknown";
-                photo = d.photoURL || "";
-                bio = d.BIO || "Student";
-            }
+          const docSnap = await getDoc(doc(db, "users", targetId));
+          if (docSnap.exists()) {
+            const d = docSnap.data();
+            name = d.Name || "Unknown";
+            photo = d.photoURL || "";
+            bio = d.BIO || "Student";
+          }
         } catch (e) { console.error(e); }
 
         list.push({ id: requestDoc.id, ...reqData, targetId, name, photo, bio });
@@ -75,23 +75,34 @@ const Requests = () => {
     return () => { unsubPending(); unsubAccepted(); };
   }, [user]);
 
-  const handleAccept = async (id) => await updateDoc(doc(db, "friend_requests", id), { status: "accepted" });
+  const handleAccept = async (req) => {
+    try {
+      await updateDoc(doc(db, "friend_requests", req.id), { status: "accepted" });
+      // Create chat automatically when request is accepted
+      const { createChat } = await import("../services/chatService");
+      await createChat(user.uid, req.targetId);
+    } catch (err) {
+      console.error("Error accepting request:", err);
+      setError("Failed to accept request");
+      setTimeout(() => setError(""), 2000);
+    }
+  };
   const handleReject = async (id) => await deleteDoc(doc(db, "friend_requests", id));
-  
+
   const handleUnfriend = async (id) => {
-      if(window.confirm("Remove this connection?")) await deleteDoc(doc(db, "friend_requests", id));
+    if (window.confirm("Remove this connection?")) await deleteDoc(doc(db, "friend_requests", id));
   };
 
   const handleMessage = (friend) => {
-      navigate('/chat', { 
-          state: { 
-              selectedUser: {
-                  uid: friend.targetId,
-                  name: friend.name,
-                  photoURL: friend.photo
-              }
-          } 
-      });
+    navigate('/chat', {
+      state: {
+        selectedUser: {
+          uid: friend.targetId,
+          name: friend.name,
+          photoURL: friend.photo
+        }
+      }
+    });
   };
 
   const openContextMenu = (friend) => {
@@ -161,14 +172,14 @@ const Requests = () => {
 
   return (
     <div style={{ padding: "30px", height: "100%", maxWidth: "800px", margin: "0 auto", color: "white", fontFamily: "sans-serif" }}>
-      
+
       {/* TABS */}
       <div style={{ display: "flex", gap: "15px", marginBottom: "30px" }}>
         <button onClick={() => setActiveTab("pending")} style={{ ...tabStyle, background: activeTab === "pending" ? "#ff2a6d" : "rgba(255,255,255,0.05)", color: "white" }}>
-            Pending Requests ({pendingRequests.length})
+          Pending Requests ({pendingRequests.length})
         </button>
         <button onClick={() => setActiveTab("connections")} style={{ ...tabStyle, background: activeTab === "connections" ? "#05d9e8" : "rgba(255,255,255,0.05)", color: activeTab === "connections" ? "black" : "white" }}>
-            My Connections
+          My Connections
         </button>
       </div>
 
@@ -190,34 +201,34 @@ const Requests = () => {
       )}
 
       <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-        
+
         {/* PENDING LIST */}
         {activeTab === "pending" && (
-            pendingRequests.length === 0 ? <div style={emptyStyle}>No new requests.</div> : 
+          pendingRequests.length === 0 ? <div style={emptyStyle}>No new requests.</div> :
             pendingRequests.map(req => (
-                <div key={req.id} style={rowStyle}>
-                    <div style={userGroupStyle}>
-                        <img src={req.photo || "https://cdn-icons-png.flaticon.com/512/149/149071.png"} style={avatarStyle} />
-                        <div>
-                            <div style={nameStyle}>{req.name}</div>
-                            <div style={{ fontSize: "13px", color: "#ff2a6d" }}>Wants to connect</div>
-                        </div>
-                    </div>
-                    <div style={{ display: "flex", gap: "12px" }}>
-                        <button onClick={() => handleAccept(req.id)} style={acceptBtnStyle} title="Accept">
-                            <Check style={iconSize} strokeWidth={3} />
-                        </button>
-                        <button onClick={() => handleReject(req.id)} style={rejectBtnStyle} title="Reject">
-                            <X style={iconSize} strokeWidth={3} />
-                        </button>
-                    </div>
+              <div key={req.id} style={rowStyle}>
+                <div style={userGroupStyle}>
+                  <img src={req.photo || "https://cdn-icons-png.flaticon.com/512/149/149071.png"} style={avatarStyle} />
+                  <div>
+                    <div style={nameStyle}>{req.name}</div>
+                    <div style={{ fontSize: "13px", color: "#ff2a6d" }}>Wants to connect</div>
+                  </div>
                 </div>
+                <div style={{ display: "flex", gap: "12px" }}>
+                  <button onClick={() => handleAccept(req)} style={acceptBtnStyle} title="Accept">
+                    <Check style={iconSize} strokeWidth={3} />
+                  </button>
+                  <button onClick={() => handleReject(req.id)} style={rejectBtnStyle} title="Reject">
+                    <X style={iconSize} strokeWidth={3} />
+                  </button>
+                </div>
+              </div>
             ))
         )}
 
         {/* CONNECTIONS LIST */}
         {activeTab === "connections" && (
-            acceptedRequests.length === 0 ? <div style={emptyStyle}>No connections yet.</div> : 
+          acceptedRequests.length === 0 ? <div style={emptyStyle}>No connections yet.</div> :
             <>
               {/* Slider view */}
               <div style={{ display: "flex", gap: "12px", overflowX: "auto", paddingBottom: "8px" }} aria-label="Connections slider" role="list">
@@ -254,24 +265,24 @@ const Requests = () => {
               {/* Vertical list with actions */}
               {acceptedRequests.map(req => (
                 <div key={req.id} style={{ ...rowStyle, position: "relative" }}>
-                    <div style={userGroupStyle}>
-                        <img src={req.photo || "https://cdn-icons-png.flaticon.com/512/149/149071.png"} style={avatarStyle} alt={req.name} />
-                        <div>
-                            <div style={nameStyle}>{req.name}</div>
-                            <div style={bioStyle}>{req.bio}</div>
-                        </div>
+                  <div style={userGroupStyle}>
+                    <img src={req.photo || "https://cdn-icons-png.flaticon.com/512/149/149071.png"} style={avatarStyle} alt={req.name} />
+                    <div>
+                      <div style={nameStyle}>{req.name}</div>
+                      <div style={bioStyle}>{req.bio}</div>
                     </div>
-                    <div style={{ display: "flex", gap: "12px" }}>
-                        <button onClick={() => openContextMenu(req)} style={{ ...messageBtnStyle, background: "#2A2B36", color: "white" }} title="Actions" aria-haspopup="dialog">
-                            <UsersIcon style={iconSize} strokeWidth={2.5} />
-                        </button>
-                        <button onClick={() => handleMessage(req)} style={messageBtnStyle} title="Message">
-                            <MessageCircle style={iconSize} strokeWidth={2.5} />
-                        </button>
-                        <button onClick={() => handleUnfriend(req.id)} style={unfriendBtnStyle} title="Unfriend">
-                            <UserMinus style={iconSize} strokeWidth={2.5} />
-                        </button>
-                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: "12px" }}>
+                    <button onClick={() => openContextMenu(req)} style={{ ...messageBtnStyle, background: "#2A2B36", color: "white" }} title="Actions" aria-haspopup="dialog">
+                      <UsersIcon style={iconSize} strokeWidth={2.5} />
+                    </button>
+                    <button onClick={() => handleMessage(req)} style={messageBtnStyle} title="Message">
+                      <MessageCircle style={iconSize} strokeWidth={2.5} />
+                    </button>
+                    <button onClick={() => handleUnfriend(req.id)} style={unfriendBtnStyle} title="Unfriend">
+                      <UserMinus style={iconSize} strokeWidth={2.5} />
+                    </button>
+                  </div>
                 </div>
               ))}
 

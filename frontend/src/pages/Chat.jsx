@@ -1,341 +1,415 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Search, Hash, Send, MoreVertical, MessageSquare, ArrowLeft } from "lucide-react"; 
-import { useLocation } from "react-router-dom"; 
+import { Search, Send, MessageSquare, ArrowLeft, Loader2, UserPlus, Users, AlertCircle } from "lucide-react";
+import { useLocation } from "react-router-dom";
 import { useAuth } from "../context/mainContext";
 import { db } from "../conf/firebase";
-import { collection, query, where, onSnapshot, addDoc, getDoc, doc, serverTimestamp, orderBy, deleteDoc, getDocs } from "firebase/firestore";
+import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore";
+import {
+  getChatsListener,
+  getMessagesListener,
+  sendMessage,
+  createChat,
+  getChatId
+} from "../services/chatService";
 
 const Chat = () => {
-  const [activeTab, setActiveTab] = useState("private");
   const { user } = useAuth();
-  const [contacts, setContacts] = useState([]); 
-  const [channels, setChannels] = useState([]); 
+  const location = useLocation();
+
+  const [activeView, setActiveView] = useState("chats"); // "chats" or "friends"
+  const [chats, setChats] = useState([]);
+  const [friends, setFriends] = useState([]);
   const [selectedChat, setSelectedChat] = useState(null);
+  const [messages, setMessages] = useState([]);
   const [messageInput, setMessageInput] = useState("");
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-  const [messages, setMessages] = useState([]);
-  const expiryTimersRef = useRef({});
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [errorStatus, setErrorStatus] = useState("");
 
-  const location = useLocation(); 
+  const messagesEndRef = useRef(null);
 
-  // Listener for Resize
+  // Resize Listener
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // Subscribe to chatrooms where current user participates
+  // 1. Subscribe to user's chats
   useEffect(() => {
     if (!user?.uid) return;
-    const q = query(collection(db, "chatroom"), where("participants", "array-contains", user.uid));
-    const unsub = onSnapshot(q, async (snap) => {
-      const priv = [];
-      const grp = [];
-      const now = Date.now();
-      const timers = expiryTimersRef.current;
-      const rooms = await Promise.all(snap.docs.map(async d => {
-        const data = d.data();
-        let name = data.name || "anonymous";
-        let photoUrl = "https://cdn-icons-png.flaticon.com/512/149/149071.png";
-        let online = true;
-        if (data.type === "direct") {
-          const otherId = (data.participants || []).find(p => p !== user.uid);
+
+    const unsubscribe = getChatsListener(user.uid, async (chatList) => {
+      try {
+        const enhancedChats = await Promise.all(chatList.map(async (chat) => {
+          const otherId = chat.users.find(uid => uid !== user.uid);
+          let name = "Unknown User";
+          let photoUrl = "https://cdn-icons-png.flaticon.com/512/149/149071.png";
+
           if (otherId) {
-            try {
-              const sDoc = await getDoc(doc(db, "users", otherId));
-              if (sDoc.exists()) {
-                const s = sDoc.data();
-                name = s.Name || name;
-                photoUrl = s.photoURL || photoUrl;
-              }
-            } catch (e) { console.error(e); }
-          }
-        }
-        return { id: d.id, ...data, name, photoUrl, online };
-      }));
-      rooms.forEach(r => {
-        const expMs = r.expiresAt ? (r.expiresAt.toMillis ? r.expiresAt.toMillis() : r.expiresAt) : null;
-        const isExpired = expMs ? expMs <= now : false;
-        if (r.type === "group") {
-          if (!isExpired) {
-            grp.push({ id: r.id, name: r.name, topic: "Temporary group", photoUrl: "", online: true });
-            if (expMs && !timers[r.id]) {
-              const delay = Math.max(expMs - now, 0);
-              timers[r.id] = setTimeout(async () => {
-                try {
-                  await deleteDoc(doc(db, "chatroom", r.id));
-                } catch (e) { console.error(e); }
-                delete timers[r.id];
-              }, delay);
+            const userDoc = await getDoc(doc(db, "users", otherId));
+            if (userDoc.exists()) {
+              const userData = userDoc.data();
+              name = userData.name || userData.Name || "Unknown User";
+              photoUrl = userData.photoUrl || userData.photoURL || photoUrl;
             }
           }
-        } else {
-          priv.push({ id: r.id, name: r.name, lastMsg: "Start a conversation", time: "Now", unread: 0, photoUrl: r.photoUrl, online: r.online });
-        }
-      });
-      setContacts(priv);
-      setChannels(grp);
-    });
-    return () => {
-      unsub();
-      const timers = expiryTimersRef.current;
-      Object.values(timers).forEach(t => clearTimeout(t));
-      expiryTimersRef.current = {};
-    };
-  }, [user?.uid]);
+          return { ...chat, name, photoUrl };
+        }));
 
-  useEffect(() => {
-    if (!selectedChat?.id) return;
-    const q = query(collection(db, "chatroom", selectedChat.id, "messages"), orderBy("createdAt", "asc"));
-    const unsub = onSnapshot(q, (snap) => {
-      const list = [];
-      snap.forEach(d => list.push({ id: d.id, ...d.data() }));
-      setMessages(list);
+        // Manual sort locally to avoid index requirement
+        enhancedChats.sort((a, b) => (b.updatedAt?.toMillis?.() || 0) - (a.updatedAt?.toMillis?.() || 0));
+        setChats(enhancedChats);
+      } catch (err) {
+        console.error("Error updating chats:", err);
+        setErrorStatus("Failed to load chat list.");
+      } finally {
+        setInitialLoading(false);
+      }
     });
-    return () => unsub();
+
+    return () => unsubscribe();
+  }, [user]);
+
+  // 2. Fetch friends for the "Start Chat" view
+  useEffect(() => {
+    if (!user?.uid) return;
+
+    const fetchFriends = async () => {
+      try {
+        const q = query(
+          collection(db, "friend_requests"),
+          where("status", "==", "accepted"),
+          where("to", "==", user.uid)
+        );
+        const q2 = query(
+          collection(db, "friend_requests"),
+          where("status", "==", "accepted"),
+          where("from", "==", user.uid)
+        );
+
+        const [snap1, snap2] = await Promise.all([getDocs(q), getDocs(q2)]);
+        const friendUids = new Set();
+        [...snap1.docs, ...snap2.docs].forEach(d => {
+          const data = d.data();
+          friendUids.add(data.from === user.uid ? data.to : data.from);
+        });
+
+        const friendList = await Promise.all([...friendUids].map(async (uid) => {
+          const uDoc = await getDoc(doc(db, "users", uid));
+          if (uDoc.exists()) {
+            const d = uDoc.data();
+            return { uid, name: d.Name || d.name || "Unknown", photoUrl: d.photoURL || d.photoUrl || "" };
+          }
+          return { uid, name: "Unknown", photoUrl: "" };
+        }));
+
+        setFriends(friendList);
+      } catch (err) {
+        console.error("Error fetching friends:", err);
+      }
+    };
+
+    fetchFriends();
+  }, [user]);
+
+  // 3. Subscribe to messages when a chat is selected
+  useEffect(() => {
+    if (!selectedChat?.id) {
+      setMessages([]);
+      return;
+    }
+
+    const unsubscribe = getMessagesListener(selectedChat.id, (msgs) => {
+      setMessages(msgs);
+    });
+
+    return () => unsubscribe();
   }, [selectedChat]);
 
-  const sendMessage = async () => {
-    const text = messageInput.trim();
-    if (!text || !selectedChat?.id || !user?.uid) return;
+  // 4. Auto-scroll to bottom
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  // Handle Send
+  const handleSend = async () => {
+    if (!messageInput.trim() || !selectedChat?.id || !user?.uid) return;
     try {
-      await addDoc(collection(db, "chatroom", selectedChat.id, "messages"), {
-        senderUid: user.uid,
-        text,
-        createdAt: serverTimestamp()
-      });
+      await sendMessage(selectedChat.id, user.uid, messageInput);
       setMessageInput("");
-    } catch (e) { console.error(e); }
+    } catch (err) {
+      console.error("Error sending message:", err);
+      setErrorStatus("Message failed to send.");
+      setTimeout(() => setErrorStatus(""), 3000);
+    }
   };
 
-  useEffect(() => {
-    if (!user?.uid) return;
-    const interval = setInterval(async () => {
-      try {
-        const q = query(collection(db, "chatroom"), where("participants", "array-contains", user.uid));
-        const snap = await getDocs(q);
-        const now = Date.now();
-        const deletions = snap.docs.filter(d => {
-          const data = d.data();
-          if (data.type !== "group") return false;
-          const exp = data.expiresAt;
-          const expMs = exp?.toMillis ? exp.toMillis() : exp;
-          return expMs && expMs <= now;
-        });
-        await Promise.all(deletions.map(d => deleteDoc(doc(db, "chatroom", d.id))));
-      } catch (e) { console.error(e); }
-    }, 60000);
-    return () => clearInterval(interval);
-  }, [user?.uid]);
+  // Start Chat with a friend
+  const startChatWithFriend = async (friend) => {
+    try {
+      setActionLoading(true);
+      setErrorStatus("");
+      console.log("Starting chat with:", friend.name);
 
-  // Navigation handler: open chat by id or create/open direct
+      const chatId = await createChat(user.uid, friend.uid);
+
+      const existing = chats.find(c => c.id === chatId);
+      if (existing) {
+        setSelectedChat(existing);
+      } else {
+        setSelectedChat({
+          id: chatId,
+          name: friend.name,
+          photoUrl: friend.photoUrl || "https://cdn-icons-png.flaticon.com/512/149/149071.png",
+          users: [user.uid, friend.uid]
+        });
+      }
+      setActiveView("chats");
+    } catch (err) {
+      console.error("Error starting chat:", err);
+      setErrorStatus("Could not open chat. Please check your connection.");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Navigation from Requests
   useEffect(() => {
     const state = location.state;
-    if (!state) return;
-
-    // CASE 1: Start Private Chat (create/open direct)
-    if (state.selectedUser) {
-        const newUser = state.selectedUser;
-        (async () => {
-          if (!user?.uid) return;
-          let targetRoom = null;
-          // Find existing direct room
-          const q = query(collection(db, "chatroom"), where("participants", "array-contains", user.uid));
-          const snap = await new Promise(resolve => onSnapshot(q, s => resolve(s)));
-          snap.forEach(d => {
-            const data = d.data();
-            if (data.type === "direct" && Array.isArray(data.participants) && data.participants.includes(newUser.uid)) {
-              targetRoom = { id: d.id, data };
-            }
-          });
-          if (!targetRoom) {
-            const docRef = await addDoc(collection(db, "chatroom"), {
-              type: "direct",
-              participants: [user.uid, newUser.uid],
-              name: newUser.name,
-              createdAt: serverTimestamp()
-            });
-            targetRoom = { id: docRef.id, data: { type: "direct", name: newUser.name } };
-          }
-          setSelectedChat({ id: targetRoom.id, name: newUser.name, photoUrl: newUser.photoURL || "https://cdn-icons-png.flaticon.com/512/149/149071.png", online: true });
-        })();
+    if (state?.selectedUser) {
+      startChatWithFriend({ uid: state.selectedUser.uid, name: state.selectedUser.name, photoUrl: state.selectedUser.photoURL });
+      window.history.replaceState({}, document.title);
     }
+  }, [location.state]);
 
-    // CASE 2: Open chatroom by id (group)
-    if (state.openChatId) {
-        (async () => {
-          try {
-            const dSnap = await getDoc(doc(db, "chatroom", state.openChatId));
-            if (dSnap.exists()) {
-              const r = dSnap.data();
-              setSelectedChat({ id: dSnap.id, name: r.name || "Group", topic: "Temporary group", photoUrl: "", online: true });
-              setActiveTab("public");
-            }
-          } catch (e) { console.error(e); }
-        })();
-    }
-    
-    // Clear state so refresh doesn't re-trigger
-    window.history.replaceState({}, document.title);
-  }, [location.state, user?.uid]);
-
-  const chatList = activeTab === "private" ? contacts : channels;
   const showList = !isMobile || (isMobile && !selectedChat);
   const showChatWindow = !isMobile || (isMobile && selectedChat);
 
+  const filteredItems = (activeView === "chats" ? chats : friends).filter(item =>
+    item.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   return (
-    <div style={{ 
-        display: isMobile ? "flex" : "grid", 
-        gridTemplateColumns: "320px 1fr", 
-        gap: "20px", 
-        height: "100%", 
-        paddingBottom: "20px", 
-        boxSizing: "border-box",
-        width: "100%"
+    <div style={{
+      display: isMobile ? "flex" : "grid",
+      gridTemplateColumns: "350px 1fr",
+      gap: "20px",
+      height: "calc(100vh - 120px)",
+      width: "100%",
+      overflow: "hidden"
     }}>
-      
-      {/* --- LEFT COLUMN: LIST --- */}
+
+      {/* LEFT: Sidebar */}
       {showList && (
-          <div className="dashboard-card" style={{ display: "flex", flexDirection: "column", overflow: "hidden", minHeight: 0, flex: 1, width: "100%" }}>
-            
-            {/* Tabs */}
-            <div style={{ display: "flex", padding: "15px", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-                <TabButton label="Private" isActive={activeTab === "private"} onClick={() => { setActiveTab("private"); setSelectedChat(null); }} />
-                <div style={{ width: "10px" }} />
-                <TabButton label="Public Channels" isActive={activeTab === "public"} onClick={() => { setActiveTab("public"); setSelectedChat(null); }} />
+        <div className="dashboard-card" style={{ display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
+
+          {/* Header */}
+          <div style={{ padding: "20px 20px 10px 20px", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "15px" }}>
+              <h2 style={{ fontSize: "18px", fontWeight: "900", color: "white", margin: 0, letterSpacing: "1px" }}>
+                {activeView === "chats" ? "CHATS" : "FRIENDS"}
+              </h2>
+              <button
+                disabled={actionLoading}
+                onClick={() => setActiveView(activeView === "chats" ? "friends" : "chats")}
+                style={{ background: "rgba(5, 217, 232, 0.1)", border: "1px solid #05d9e8", color: "#05d9e8", padding: "5px 12px", borderRadius: "20px", fontSize: "12px", cursor: actionLoading ? "not-allowed" : "pointer", fontWeight: "700" }}
+              >
+                {activeView === "chats" ? "+ New Chat" : "View Chats"}
+              </button>
             </div>
 
-            {/* Search */}
-            <div style={{ padding: "15px" }}>
-                  <div style={{ display: "flex", alignItems: "center", background: "rgba(0,0,0,0.2)", borderRadius: "12px", padding: "10px" }}>
-                      <Search size={18} color="#6c757d" style={{ marginRight: "10px" }} />
-                      <input type="text" placeholder={`Search ${activeTab}...`} style={{ background: "transparent", border: "none", color: "white", outline: "none", width: "100%" }} />
-                  </div>
-            </div>
-
-            {/* List */}
-            <div style={{ flex: 1, overflowY: "auto", padding: "15px", display: "flex", flexDirection: "column", gap: "10px", minHeight: 0 }}>
-                {chatList.map(item => (
-                    <div 
-                        key={item.id} 
-                        onClick={() => setSelectedChat(item)}
-                        style={{ 
-                            display: "flex", alignItems: "center", gap: "12px", padding: "12px", 
-                            borderRadius: "12px", cursor: "pointer", transition: "all 0.2s",
-                            background: selectedChat?.id === String(item.id) ? "rgba(5, 217, 232, 0.1)" : "rgba(255,255,255,0.03)",
-                            border: selectedChat?.id === String(item.id) ? "1px solid #05d9e8" : "1px solid transparent"
-                        }}
-                    >
-                        {activeTab === "private" ? (
-                            <>
-                              <div style={{ position: "relative", minWidth: "45px" }}>
-                                 <img src={item.photoUrl} alt={item.name} style={{ width: "45px", height: "45px", borderRadius: "50%", objectFit: "cover" }} />
-                                 {item.online && <div style={{ position: "absolute", bottom: 2, right: 2, width: 10, height: 10, background: "#00ff88", borderRadius: "50%", border: "2px solid #13141f" }} />}
-                              </div>
-                              <div style={{ flex: 1, overflow: "hidden" }}>
-                                  <div style={{ fontWeight: "600", fontSize: "15px", color: "white", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{item.name}</div>
-                                  <div style={{ fontSize: "13px", color: "#aaa" }}>{item.lastMsg}</div>
-                              </div>
-                            </>
-                        ) : (
-                            <>
-                              <div style={{ minWidth: "45px", height: "45px", borderRadius: "12px", background: "rgba(255, 42, 109, 0.1)", display: "flex", alignItems: "center", justifyContent: "center", color: "#ff2a6d" }}>
-                                  <Hash size={24} />
-                              </div>
-                              <div>
-                                 <div style={{ fontWeight: "600", fontSize: "15px", color: activeTab === 'public' ? '#ff2a6d' : 'white' }}>{item.name}</div>
-                              </div>
-                            </>
-                        )}
-                    </div>
-                ))}
+            <div style={{ position: "relative" }}>
+              <Search size={16} style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#6c757d" }} />
+              <input
+                type="text"
+                placeholder={activeView === "chats" ? "Search chats..." : "Search friends..."}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                style={{ width: "100%", background: "rgba(0,0,0,0.3)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "10px", padding: "10px 10px 10px 35px", color: "white", outline: "none", fontSize: "14px" }}
+              />
             </div>
           </div>
-      )}
 
-      {/* --- RIGHT COLUMN: CHAT WINDOW --- */}
-      {showChatWindow && (
-          <div className="dashboard-card" style={{ display: "flex", flexDirection: "column", overflow: "hidden", minHeight: 0, flex: 1, width: "100%" }}>
-            {selectedChat ? (
-              <>
-                <div style={{ padding: "15px 25px", borderBottom: "1px solid rgba(255,255,255,0.05)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
-                        
-                        {/* BACK BUTTON (Mobile Only) */}
-                        {isMobile && (
-                            <button 
-                                onClick={() => setSelectedChat(null)}
-                                style={{ background: "transparent", border: "none", color: "white", padding: 0, cursor: "pointer", marginRight: "5px" }}
-                            >
-                                <ArrowLeft size={24} />
-                            </button>
-                        )}
+          {/* Error Notification */}
+          {errorStatus && (
+            <div style={{ padding: "10px 20px", background: "rgba(255, 42, 109, 0.1)", color: "#ff2a6d", fontSize: "12px", display: "flex", alignItems: "center", gap: "8px" }}>
+              <AlertCircle size={14} /> {errorStatus}
+            </div>
+          )}
 
-                        {activeTab === 'private' ? (
-                             <img src={selectedChat.photoUrl} style={{ width: "40px", height: "40px", borderRadius: "50%" }} />
-                        ) : (
-                             <Hash size={24} color="#ff2a6d" />
-                        )}
-                        <div>
-                            <h3 style={{ margin: 0, fontSize: "18px", color: "white" }}>{selectedChat.name}</h3>
-                            <span style={{ fontSize: "12px", color: selectedChat.online ? "#00ff88" : "#aaa" }}>
-                                {activeTab === 'private' ? (selectedChat.online ? 'Online' : 'Offline') : selectedChat.topic}
-                            </span>
-                        </div>
-                    </div>
-                    <div style={{ display: "flex", gap: "20px", color: "#05d9e8" }}>
-                        <MoreVertical size={20} style={{ cursor: "pointer" }} />
-                    </div>
-                </div>
-
-                <div style={{ flex: 1, padding: "20px", display: "flex", flexDirection: "column", color: "white", overflowY: "auto", minHeight: 0, gap: "10px" }}>
-                      {messages.length === 0 ? (
-                        <div style={{ textAlign: "center", marginTop: "auto", marginBottom: "auto", color: "#aaa" }}>
-                          {activeTab === 'private' ? `Start conversation with ${selectedChat.name}` : `Welcome to #${selectedChat.name}`}
-                        </div>
-                      ) : (
-                        messages.map(m => {
-                          const mine = m.senderUid === user?.uid;
-                          return (
-                            <div key={m.id} style={{ alignSelf: mine ? "flex-end" : "flex-start", maxWidth: "70%", background: mine ? "#05d9e8" : "rgba(255,255,255,0.08)", color: mine ? "black" : "white", padding: "10px 14px", borderRadius: mine ? "16px 16px 4px 16px" : "16px 16px 16px 4px" }}>
-                              {m.text}
-                            </div>
-                          );
-                        })
-                      )}
-                </div>
-
-                <div style={{ padding: "20px", background: "rgba(0,0,0,0.2)" }}>
-                    <div style={{ display: "flex", gap: "15px", alignItems: "center", background: "#0b0c15", padding: "5px 5px 5px 20px", borderRadius: "30px", border: "1px solid rgba(255,255,255,0.1)" }}>
-                        <input 
-                            type="text" placeholder="Type a message..."
-                            value={messageInput} onChange={(e) => setMessageInput(e.target.value)}
-                            style={{ flex: 1, background: "transparent", border: "none", color: "white", outline: "none", fontSize: "15px" }} 
-                        />
-                        <button onClick={sendMessage} style={{ width: "45px", height: "45px", borderRadius: "50%", background: "#05d9e8", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
-                          <Send size={20} color="black" />
-                        </button>
-                    </div>
-                </div>
-              </>
-            ) : (
-              // Empty State 
-              <div style={{ height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "#6c757d" }}>
-                  <MessageSquare size={60} style={{ marginBottom: "20px", opacity: 0.5 }} />
-                  <h2 style={{ margin: 0, color: "white" }}>Select a Conversation</h2>
+          {/* List Content */}
+          <div style={{ flex: 1, overflowY: "auto", padding: "10px" }}>
+            {initialLoading && chats.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-40 text-blue-400">
+                <Loader2 className="animate-spin mb-2" size={32} />
+                <span className="text-sm">Loading contacts...</span>
               </div>
+            ) : filteredItems.length === 0 ? (
+              <div style={{ textAlign: "center", color: "#6c757d", marginTop: "40px", padding: "20px" }}>
+                {activeView === "chats" ? (
+                  <>
+                    <MessageSquare size={48} style={{ margin: "0 auto 15px", opacity: 0.1 }} />
+                    <p>No active conversations.</p>
+                    <button onClick={() => setActiveView("friends")} style={{ color: "#05d9e8", fontSize: "14px", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>Message a friend</button>
+                  </>
+                ) : (
+                  <>
+                    <Users size={48} style={{ margin: "0 auto 15px", opacity: 0.1 }} />
+                    <p>No friends found.</p>
+                    <a href="/find" style={{ color: "#ff2a6d", fontSize: "14px", textDecoration: "underline" }}>Discover people</a>
+                  </>
+                )}
+              </div>
+            ) : (
+              filteredItems.map(item => (
+                <div
+                  key={item.id || item.uid}
+                  onClick={() => {
+                    if (actionLoading) return;
+                    activeView === "chats" ? setSelectedChat(item) : startChatWithFriend(item);
+                  }}
+                  style={{
+                    display: "flex", alignItems: "center", gap: "15px", padding: "12px",
+                    borderRadius: "16px", cursor: actionLoading ? "wait" : "pointer", transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                    background: selectedChat?.id === item.id ? "rgba(5, 217, 232, 0.15)" : "transparent",
+                    marginBottom: "4px",
+                    border: selectedChat?.id === item.id ? "1px solid rgba(5, 217, 232, 0.3)" : "1px solid transparent",
+                    opacity: actionLoading ? 0.6 : 1
+                  }}
+                >
+                  <div style={{ position: "relative" }}>
+                    <img src={item.photoUrl || "https://cdn-icons-png.flaticon.com/512/149/149071.png"} alt={item.name} style={{ width: "50px", height: "50px", borderRadius: "14px", objectFit: "cover", background: "#333" }} />
+                    {item.lastMessage && <div style={{ position: "absolute", top: -2, right: -2, width: 12, height: 12, background: "#05d9e8", borderRadius: "50%", border: "3px solid #13141f" }} />}
+                  </div>
+                  <div style={{ flex: 1, overflow: "hidden" }}>
+                    <div style={{ fontWeight: "700", fontSize: "16px", color: "white", marginBottom: "2px" }}>{item.name}</div>
+                    <div style={{ fontSize: "13px", color: "#6c757d", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {activeView === "chats" ? (item.lastMessage || "Start a conversation...") : "Tab to message"}
+                    </div>
+                  </div>
+                </div>
+              ))
             )}
           </div>
+
+          {/* Local Action Loader Overlay */}
+          {actionLoading && (
+            <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 10, backdropFilter: "blur(2px)" }}>
+              <div className="flex flex-col items-center">
+                <Loader2 className="animate-spin text-blue-400 mb-2" size={40} />
+                <span className="text-white font-bold text-sm">Opening Chat...</span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* RIGHT: Window */}
+      {showChatWindow && (
+        <div className="dashboard-card" style={{ display: "flex", flexDirection: "column", overflow: "hidden", background: "rgba(13, 14, 27, 0.7)" }}>
+          {selectedChat ? (
+            <>
+              {/* Header */}
+              <div style={{ padding: "15px 25px", borderBottom: "1px solid rgba(255,255,255,0.05)", display: "flex", alignItems: "center", justifyContent: "space-between", background: "rgba(0,0,0,0.2)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
+                  {isMobile && (
+                    <button onClick={() => setSelectedChat(null)} style={{ background: "transparent", border: "none", color: "white", padding: 0, cursor: "pointer" }}>
+                      <ArrowLeft size={24} />
+                    </button>
+                  )}
+                  <img src={selectedChat.photoUrl || "https://cdn-icons-png.flaticon.com/512/149/149071.png"} style={{ width: "45px", height: "45px", borderRadius: "12px", objectFit: "cover" }} />
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: "18px", color: "white", fontWeight: "800" }}>{selectedChat.name}</h3>
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                      <span style={{ fontSize: "12px", color: "#00ff88", fontWeight: "600" }}>Real-time Enabled</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Messages Body */}
+              <div style={{ flex: 1, padding: "20px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "12px", scrollbarWidth: "thin" }}>
+                {messages.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full opacity-30">
+                    <MessageSquare size={80} className="mb-4" />
+                    <p className="text-xl font-bold">Say Hello to {selectedChat.name}!</p>
+                    <p className="text-sm">Start your conversation below</p>
+                  </div>
+                ) : (
+                  messages.map((m, idx) => {
+                    const isMine = m.senderId === user?.uid;
+                    return (
+                      <div
+                        key={m.id || idx}
+                        style={{
+                          alignSelf: isMine ? "flex-end" : "flex-start",
+                          maxWidth: "70%",
+                          background: isMine ? "linear-gradient(135deg, #05d9e8 0%, #00b4d8 100%)" : "rgba(255,255,255,0.08)",
+                          color: isMine ? "black" : "white",
+                          padding: "12px 18px",
+                          borderRadius: isMine ? "20px 20px 4px 20px" : "20px 20px 20px 4px",
+                          boxShadow: isMine ? "0 4px 15px rgba(5, 217, 232, 0.2)" : "none",
+                          position: "relative"
+                        }}
+                      >
+                        <div style={{ fontSize: "15px", lineHeight: "1.4", fontWeight: isMine ? "600" : "400" }}>{m.text}</div>
+                        <div style={{ fontSize: "10px", marginTop: "4px", textAlign: isMine ? "right" : "left", opacity: 0.5 }}>
+                          {m.createdAt?.toMillis ? new Date(m.createdAt.toMillis()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ""}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+                <div ref={messagesEndRef} />
+              </div>
+
+              {/* Input Area */}
+              <div style={{ padding: "20px 30px", background: "rgba(0,0,0,0.3)" }}>
+                <div style={{ display: "flex", gap: "10px", alignItems: "center", background: "#0b0c15", padding: "8px 8px 8px 20px", borderRadius: "20px", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "inset 0 2px 10px rgba(0,0,0,0.5)" }}>
+                  <input
+                    type="text"
+                    placeholder="Message..."
+                    value={messageInput}
+                    onChange={(e) => setMessageInput(e.target.value)}
+                    onKeyPress={(e) => e.key === "Enter" && handleSend()}
+                    style={{ flex: 1, background: "transparent", border: "none", color: "white", outline: "none", fontSize: "16px" }}
+                  />
+                  <button
+                    onClick={handleSend}
+                    disabled={!messageInput.trim()}
+                    style={{ width: "45px", height: "45px", borderRadius: "15px", background: messageInput.trim() ? "#05d9e8" : "#333", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "all 0.2s" }}
+                  >
+                    <Send size={20} color={messageInput.trim() ? "black" : "#666"} />
+                  </button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div style={{ height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "#6c757d", padding: "40px", textAlign: "center" }}>
+              <div style={{ position: "relative", marginBottom: "30px" }}>
+                <div className="absolute inset-0 bg-blue-500/20 blur-3xl rounded-full"></div>
+                <MessageSquare size={100} style={{ opacity: 0.1, position: "relative" }} />
+              </div>
+              <h2 style={{ margin: "0 0 10px 0", color: "white", fontSize: "24px", fontWeight: "900" }}>Your Inbox</h2>
+              <p style={{ opacity: 0.5, maxWidth: "300px", lineHeight: "1.6" }}>
+                Select a conversation from the left or start a new message with one of your connections.
+              </p>
+              <button
+                onClick={() => setActiveView("friends")}
+                className="mt-6 px-8 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold transition-all transform hover:scale-105"
+              >
+                Start Messaging
+              </button>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
 };
-
-const TabButton = ({ label, isActive, onClick }) => (
-    <button onClick={onClick} style={{ flex: 1, padding: "10px", border: "none", borderRadius: "12px", cursor: "pointer", fontWeight: "600", fontSize: "14px", transition: "all 0.2s", background: isActive ? "rgba(255, 42, 109, 0.1)" : "transparent", color: isActive ? "#ff2a6d" : "#6c757d", borderBottom: isActive ? "3px solid #ff2a6d" : "3px solid transparent" }}>
-        {label}
-    </button>
-)
 
 export default Chat;

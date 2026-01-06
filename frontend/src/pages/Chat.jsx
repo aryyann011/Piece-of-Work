@@ -295,24 +295,32 @@ const Chat = () => {
   return (
     <div style={{
       display: isMobile ? "flex" : "grid",
-      gridTemplateColumns: "350px 1fr",
+      gridTemplateColumns: isMobile ? "1fr" : "minmax(280px, 350px) 1fr",
       gap: "20px",
       height: "calc(100vh - 120px)",
       width: "100%",
-      overflow: "hidden"
+      overflow: "hidden",
+      padding: isMobile ? "0" : "0"
     }}>
 
       {/* LEFT: Sidebar */}
       {showList && (
-        <div className="dashboard-card" style={{ display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
+        <div className="dashboard-card" style={{ 
+          display: "flex", 
+          flexDirection: "column", 
+          overflow: "hidden", 
+          position: "relative",
+          minWidth: isMobile ? "100%" : "280px",
+          width: isMobile ? "100%" : "auto"
+        }}>
 
           {/* Header */}
-          <div style={{ padding: "20px 20px 10px 20px", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "15px" }}>
-              <h2 style={{ fontSize: "18px", fontWeight: "900", color: "white", margin: 0, letterSpacing: "1px" }}>
+          <div style={{ padding: isMobile ? "15px 15px 10px 15px" : "20px 20px 10px 20px", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "15px", gap: "10px", flexWrap: "wrap" }}>
+              <h2 style={{ fontSize: isMobile ? "16px" : "18px", fontWeight: "900", color: "white", margin: 0, letterSpacing: "1px" }}>
                 {activeView === "chats" ? "CHATS" : activeView === "create_group" ? "NEW GROUP" : "FRIENDS"}
               </h2>
-              <div style={{ display: 'flex', gap: '5px' }}>
+              <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
                 {activeView !== "create_group" && (
                   <button
                     title="Create Group"
@@ -325,7 +333,7 @@ const Chat = () => {
                 <button
                   disabled={actionLoading}
                   onClick={() => setActiveView(activeView === "chats" ? "friends" : "chats")}
-                  style={{ background: "rgba(5, 217, 232, 0.1)", border: "1px solid #05d9e8", color: "#05d9e8", padding: "5px 12px", borderRadius: "20px", fontSize: "12px", cursor: actionLoading ? "not-allowed" : "pointer", fontWeight: "700" }}
+                  style={{ background: "rgba(5, 217, 232, 0.1)", border: "1px solid #05d9e8", color: "#05d9e8", padding: isMobile ? "5px 10px" : "5px 12px", borderRadius: "20px", fontSize: isMobile ? "11px" : "12px", cursor: actionLoading ? "not-allowed" : "pointer", fontWeight: "700", whiteSpace: "nowrap" }}
                 >
                   {activeView === "chats" ? "+ New Chat" : "View Chats"}
                 </button>
@@ -340,7 +348,7 @@ const Chat = () => {
                   placeholder={activeView === "chats" ? "Search chats..." : "Search friends..."}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  style={{ width: "100%", background: "rgba(0,0,0,0.3)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "10px", padding: "10px 10px 10px 35px", color: "white", outline: "none", fontSize: "14px" }}
+                  style={{ width: "100%", background: "rgba(0,0,0,0.3)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "10px", padding: "10px 10px 10px 35px", color: "white", outline: "none", fontSize: isMobile ? "13px" : "14px" }}
                 />
               </div>
             )}
@@ -443,12 +451,12 @@ const Chat = () => {
                   }}
                 >
                   <div style={{ position: "relative" }}>
-                    <img src={item.photoUrl || "https://cdn-icons-png.flaticon.com/512/149/149071.png"} alt={item.name} style={{ width: "50px", height: "50px", borderRadius: "14px", objectFit: "cover", background: "#333" }} />
+                    <img src={item.photoUrl || "https://cdn-icons-png.flaticon.com/512/149/149071.png"} alt={item.name} style={{ width: "50px", height: "50px", borderRadius: "14px", objectFit: "cover", background: "#333", minWidth: "50px" }} />
                     {item.lastMessage && <div style={{ position: "absolute", top: -2, right: -2, width: 12, height: 12, background: "#05d9e8", borderRadius: "50%", border: "3px solid #13141f" }} />}
                   </div>
-                  <div style={{ flex: 1, overflow: "hidden" }}>
-                    <div style={{ fontWeight: "700", fontSize: "16px", color: "white", marginBottom: "2px" }}>{item.name}</div>
-                    <div style={{ fontSize: "13px", color: "#6c757d", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  <div style={{ flex: 1, overflow: "hidden", minWidth: 0 }}>
+                    <div style={{ fontWeight: "700", fontSize: isMobile ? "14px" : "16px", color: "white", marginBottom: "2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</div>
+                    <div style={{ fontSize: isMobile ? "12px" : "13px", color: "#6c757d", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                       {activeView === "chats" ? (item.lastMessage || "Start a conversation...") : "Tab to message"}
                     </div>
                   </div>

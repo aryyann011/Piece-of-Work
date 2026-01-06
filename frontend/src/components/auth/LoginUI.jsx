@@ -1,9 +1,12 @@
 import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 
 const LoginUI = ({ regNo, setRegNo, email, setEmail, password, setPassword, error, isSubmitting, handleSubmit, toggleView }) => {
+
+  const navigate = useNavigate()
   return (
-    <div className="w-full selection:bg-purple-500/30">
+    <div className="h-180 w-full selection:bg-purple-500/30">
       
       {/* Login Card with Shake Animation on Error */}
       <motion.div 
@@ -86,7 +89,7 @@ const LoginUI = ({ regNo, setRegNo, email, setEmail, password, setPassword, erro
         </form>
 
         {/* Toggle View Link */}
-        <p className="mt-8 text-center text-slate-500 text-sm">
+        <p className="mt-4 text-center text-slate-500 text-sm">
           Don't have an account?{" "}
           <button 
             type="button" 
@@ -96,9 +99,20 @@ const LoginUI = ({ regNo, setRegNo, email, setEmail, password, setPassword, erro
             Create one
           </button>
         </p>
+        {/* <div style={{ marginTop: "20px", textAlign: "center", zIndex : "12" }}> */}
+            <p style={{ marginTop: "20px", textAlign: "center", zIndex : "12", color: "#666", fontSize: "15px" }}>
+                Trouble logging in?{" "}
+                <span 
+                    onClick={() => navigate('/feedback')} 
+                    style={{ color: "#05d9e8", cursor: "pointer", fontWeight: "bold", textDecoration : "underline" }}
+                >
+                    Report Issue
+                </span>
+            </p>
+        {/* </div> */}
 
         {/* Footer Text */}
-        <footer className="mt-12 text-center">
+        <footer className="mt-10 text-center">
           <p className="text-slate-500 text-[10px] uppercase tracking-[0.3em] font-semibold opacity-40">
             Secure Student Access
           </p>

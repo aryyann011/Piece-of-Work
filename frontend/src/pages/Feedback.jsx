@@ -7,7 +7,7 @@ const TEAM = [
     { 
         name: "Chirabrata Ghosal", 
         // role: "Frontend Dev", 
-        img: "Chira.png",
+        img: "/Chira.png",
         socials: {
             linkedin: "https://www.linkedin.com/in/chirabrata-ghosal-40b942344/",
             twitter: "https://x.com/Chirabrata07"
@@ -16,7 +16,7 @@ const TEAM = [
     { 
         name: "Anirban Sarkar", 
         // role: "Backend Dev", 
-        img: "Anirban.png",
+        img: "/Anirban.png",
         socials: {
             linkedin: "https://www.linkedin.com/in/anirban-sarkar-259b44309/",
             twitter: "https://twitter.com"
@@ -25,7 +25,7 @@ const TEAM = [
     { 
         name: "Aryan Mishra", 
         // role: "UI/UX Designer", 
-        img: "Aryan.png",
+        img: "/Aryan.png",
         socials: {
             linkedin: "https://www.linkedin.com/in/aryan-mishra-987b4a321/",
             twitter: "https://x.com/sushimachine11"

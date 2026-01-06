@@ -100,7 +100,7 @@ const LoginUI = ({ regNo, setRegNo, email, setEmail, password, setPassword, erro
           </button>
         </p>
         {/* <div style={{ marginTop: "20px", textAlign: "center", zIndex : "12" }}> */}
-            <p style={{ marginTop: "20px", textAlign: "center", zIndex : "12", color: "#666", fontSize: "15px" }}>
+            <p style={{ marginTop: "20px", textAlign: "center", zIndex : "12", color: "#666", fontSize: "14px" }}>
                 Trouble logging in?{" "}
                 <span 
                     onClick={() => navigate('/feedback')} 

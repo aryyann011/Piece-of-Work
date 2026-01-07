@@ -63,7 +63,8 @@ const Layout = () => {
           </button>
 
           <Link to="/" style={{ display: "flex", alignItems: "center", gap: "10px", textDecoration: "none" }}>
-            <Hexagon fill="#ff2a6d" stroke="none" size={32} />
+            {/* <Hexagon fill="#ff2a6d" stroke="none" size={32} /> */}
+            <img src="/blue-ph.png" alt="" className="w-10"/>
             <div style={{ lineHeight: "1" }}>
               <div style={{ fontWeight: "800", fontSize: "20px", letterSpacing: "1px", color: "white" }}>CAMPUS</div>
               <div style={{ fontWeight: "400", fontSize: "20px", color: "#05d9e8", letterSpacing: "2px" }}>CONNECT</div>

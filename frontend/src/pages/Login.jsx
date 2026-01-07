@@ -80,7 +80,7 @@ const Login = () => {
               error={error}
               isSubmitting={isSubmitting}
               handleSubmit={handleSubmit}
-              toggleView={toggleView} // Pass toggle function
+              toggleView={toggleView} 
             />
           ) : (
             <SignUpUI
@@ -97,7 +97,9 @@ const Login = () => {
             />
           )}
         </div>
+        
       </main>
+      
     </div>
   );
 };

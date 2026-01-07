@@ -8,6 +8,7 @@ import Find from "./pages/Find";
 import Profile from "./pages/Profile";
 import EditProfile from "./pages/EditProfile";
 import Requests from "./pages/Requests";
+import Feedback from "./pages/Feedback";
 
 // 1. The Bouncer (Security Check)
 const ProtectedRoute = ({ children }) => {
@@ -37,7 +38,7 @@ function App() {
       <Routes>
         {/* PUBLIC: Login */}
         <Route path="/login" element={<LoginWrapper />} />
-
+        <Route path="/feedback" element={<Feedback />} />
         {/* PROTECTED: The Dashboard */}
         <Route
           element={
@@ -53,6 +54,7 @@ function App() {
           <Route path="/edit-profile" element={<EditProfile />} />
           <Route path="/requests" element={<Requests />} />
           <Route path="/settings" element={<Placeholder title="Profile Settings" subtitle="Manage your campus ID" />} />
+          <Route path="/feedback" element={<Feedback />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" />} />

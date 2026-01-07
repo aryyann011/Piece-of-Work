@@ -9,20 +9,25 @@ import Profile from "./pages/Profile";
 import EditProfile from "./pages/EditProfile";
 import Requests from "./pages/Requests";
 import Feedback from "./pages/Feedback";
+import LoadingScreen from "./components/Loading";
+import { useState, useEffect } from "react";
 
-// 1. The Bouncer (Security Check)
 const ProtectedRoute = ({ children }) => {
-  const { user, loading } = useAuth();
+  const { user, loading: authLoading } = useAuth(); 
+  const [minLoadFinished, setMinLoadFinished] = useState(false);
 
-  if (loading) {
-    return (
-      <div className="h-screen w-screen flex flex-col items-center justify-center bg-slate-950 text-blue-400 font-sans tracking-[0.2em]">
-        <div className="animate-pulse mb-4 text-xl font-black">LOADING CAMPUS...</div>
-        <div className="w-48 h-1 bg-white/10 rounded-full overflow-hidden">
-          <div className="h-full bg-blue-500 animate-progress origin-left"></div>
-        </div>
-      </div>
-    );
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setMinLoadFinished(true);
+    }, 2000); 
+
+    return () => clearTimeout(timer);
+  }, []);
+
+  const showLoading = authLoading || !minLoadFinished;
+
+  if (showLoading) {
+    return <LoadingScreen />;
   }
 
   if (!user) {

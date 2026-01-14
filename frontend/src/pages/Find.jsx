@@ -30,6 +30,7 @@ const Find = () => {
           regNo: data.regNo || "",
           major: data.branch || "",
           year: data.year || "",
+          role: data.role || "student",
           status: data.isOnline ? "Online" : "Offline",
           photoUrl: data.photoUrl || "https://cdn-icons-png.flaticon.com/512/149/149071.png"
         });
@@ -103,10 +104,14 @@ const Find = () => {
                              
                              {/* Info */}
                              <div style={{ flex: 1 }}>
-                                 <div style={{ fontWeight: "600", color: "white", fontSize: "16px" }}>{student.name}</div>
-                                 <div style={{ display: "flex", gap: "8px", marginTop: "4px" }}>
+                                 <div style={{ fontWeight: "600", color: "white", fontSize: "16px", display: "flex", alignItems: "center", gap: "6px" }}>
+                                   {student.name}
+                                   {student.role === "club_lead" && <span style={{ fontSize: "10px", background: "#ff9500", color: "white", padding: "2px 6px", borderRadius: "4px", fontWeight: "600" }}>Lead</span>}
+                                 </div>
+                                 <div style={{ display: "flex", gap: "8px", marginTop: "4px", alignItems: "center", flexWrap: "wrap" }}>
                                      <span style={{ fontSize: "11px", color: "#ff2a6d", background: "rgba(255, 42, 109, 0.1)", padding: "2px 6px", borderRadius: "4px" }}>{student.regNo}</span>
                                      <span style={{ fontSize: "11px", color: "#05d9e8", background: "rgba(5, 217, 232, 0.1)", padding: "2px 6px", borderRadius: "4px" }}>{student.major}</span>
+                                     {student.regNo && <span style={{ fontSize: "10px", color: "#00d4ff" }}>✓</span>}
                                  </div>
                              </div>
 
@@ -134,10 +139,14 @@ const Find = () => {
                                 {student.status}
                             </div>
                             <img src={student.photoUrl} alt={student.name} style={{ width: "80px", height: "80px", borderRadius: "50%", objectFit: "cover", marginBottom: "15px", border: "2px solid rgba(255,255,255,0.1)" }} />
-                            <h3 style={{ margin: "0 0 5px 0", fontSize: "18px", color: "white", textAlign: "center" }}>{student.name}</h3>
-                            <div style={{ display: "flex", gap: "8px", marginBottom: "15px", flexWrap: "wrap", justifyContent: "center" }}>
+                            <h3 style={{ margin: "0 0 5px 0", fontSize: "18px", color: "white", textAlign: "center", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
+                              {student.name}
+                              {student.role === "club_lead" && <span style={{ fontSize: "10px", background: "#ff9500", color: "white", padding: "2px 6px", borderRadius: "4px", fontWeight: "600" }}>Lead</span>}
+                            </h3>
+                            <div style={{ display: "flex", gap: "8px", marginBottom: "15px", flexWrap: "wrap", justifyContent: "center", alignItems: "center" }}>
                                 <span style={{ fontSize: "11px", background: "rgba(255, 42, 109, 0.1)", color: "#ff2a6d", padding: "4px 8px", borderRadius: "6px", border: "1px solid rgba(255, 42, 109, 0.3)" }}>{student.regNo}</span>
                                 <span style={{ fontSize: "11px", background: "rgba(5, 217, 232, 0.1)", color: "#05d9e8", padding: "4px 8px", borderRadius: "6px", border: "1px solid rgba(5, 217, 232, 0.3)" }}>{student.major}</span>
+                                {student.regNo && <span style={{ fontSize: "10px", color: "#00d4ff", fontWeight: "600" }}>✓ Verified</span>}
                             </div>
                             <button 
                                 onClick={() => handleMessage(student)}

@@ -55,6 +55,8 @@ const Requests = () => {
             name: userData.name || "Unknown",
             photo: userData.photoUrl || "",
             bio: userData.bio || "Student",
+            role: userData.role || "student",
+            regNo: userData.regNo || "",
             isOnline: userData.isOnline || false,
           };
         } catch (e) {
@@ -182,9 +184,13 @@ const Requests = () => {
               {req.isOnline && <div style={onlineBadge} />}
             </div>
             <div style={{overflow: "hidden"}}>
-              <div style={{ fontWeight: "bold", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"}}>{req.name}</div>
-              <div style={{ fontSize: 12, color: activeTab === 'pending' ? "#ff2a6d" : "#aaa" }}>
+              <div style={{ fontWeight: "bold", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "flex", alignItems: "center", gap: "6px" }}>
+                {req.name}
+                {req.role === "club_lead" && <span style={{ fontSize: "10px", background: "#ff9500", color: "white", padding: "2px 6px", borderRadius: "4px", fontWeight: "600" }}>Lead</span>}
+              </div>
+              <div style={{ fontSize: 12, color: activeTab === 'pending' ? "#ff2a6d" : "#aaa", display: "flex", alignItems: "center", gap: "6px" }}>
                 {activeTab === 'pending' ? "Wants to connect" : req.bio}
+                {req.regNo && <span style={{ fontSize: "10px", color: "#00d4ff" }}>✓ {req.regNo}</span>}
               </div>
             </div>
           </div>

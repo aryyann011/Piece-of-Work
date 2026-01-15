@@ -13,6 +13,7 @@ import Requests from "./pages/Requests";
 import Feedback from "./pages/Feedback";
 import LoadingScreen from "./components/Loading";
 import { useState, useEffect } from "react";
+import Community from "./pages/Community";
 
 const ProtectedRoute = ({ children }) => {
   const { user, loading: authLoading } = useAuth(); 
@@ -57,6 +58,7 @@ function App() {
           <Route path="/" element={<Discovery />} />
           <Route path="/club-hub" element={<ClubHub />} />
           <Route path="/club-leader" element={<ClubLeadDashboard />} />
+          <Route path="/community" element={<Community />} />
           <Route path="/chat" element={<Chat />} />
           <Route path="/find" element={<Find />} />
           <Route path="/profile" element={<Profile />} />

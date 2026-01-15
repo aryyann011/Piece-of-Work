@@ -1,14 +1,18 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Edit3, MapPin, Calendar, Book, Award, Activity, Heart, Users, Eye, Check, ShieldCheck } from "lucide-react";
+import { Edit3, MapPin, Calendar, Book, Award, Activity, Heart,  CheckCircle, Users, Eye, Check, ShieldCheck, Medal } from "lucide-react";
 import { useAuth } from "../context/mainContext";
 import { getUserProfile } from "../services/profileService";
+// --- NEW IMPORTS FOR BADGE ---
+import { collection, query, where, getCountFromServer } from "firebase/firestore"; 
+import { db } from "../conf/firebase";
 
 const Profile = () => {
   const { user, userData } = useAuth(); // Accessing userData for role-based badges
   const navigate = useNavigate();
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [tasksCompleted, setTasksCompleted] = useState(0); // NEW STATE FOR BADGE
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -17,6 +21,12 @@ const Profile = () => {
       try {
         const userProfile = await getUserProfile(user.uid);
         setProfile(userProfile);
+
+        // --- NEW: FETCH VERIFIED TASK COUNT FOR BADGE ---
+        const q = query(collection(db, "assignments"), where("studentId", "==", user.uid), where("status", "==", "completed"));
+        const snapshot = await getCountFromServer(q);
+        setTasksCompleted(snapshot.data().count);
+
       } catch (err) {
         console.error("Failed to fetch profile", err);
       } finally {
@@ -26,6 +36,12 @@ const Profile = () => {
 
     fetchProfile();
   }, [user]);
+
+  // --- NEW: BADGE LOGIC ---
+  let badge = null;
+  if (tasksCompleted >= 10) badge = { label: "Community Hero", color: "purple", icon: <Medal size={16}/> };
+  else if (tasksCompleted >= 5) badge = { label: "Top Contributor", color: "pink", icon: <Award size={16}/> };
+  else if (tasksCompleted >= 1) badge = { label: "Active Volunteer", color: "blue", icon: <ShieldCheck size={16}/> };
 
   if (loading) {
     return (
@@ -67,12 +83,20 @@ const Profile = () => {
                )}
             </div>
 
+            {/* --- NEW: DYNAMIC MERIT BADGE --- */}
+            {badge && (
+                <div className={`mt-2 inline-flex items-center gap-4 px-4 py-1 rounded-full border shadow-lg bg-${badge.color}-500/20 border-${badge.color}-500/50 text-${badge.color}-300`}>
+                    {badge.icon}
+                    <span className="text-xs font-bold uppercase tracking-wider">{badge.label}</span>
+                </div>
+            )}
+
             {/* Club Leader Badge */}
-            {userData?.role === "club_lead" && (
+            {userData?.role === "community_leader" && (
               <div className="mt-2 inline-flex items-center gap-1.5 bg-gradient-to-r from-yellow-500 to-orange-600 px-4 py-1 rounded-full border border-yellow-400/30 shadow-xl shadow-orange-900/20">
                 <ShieldCheck size={14} className="text-white" />
                 <span className="text-[10px] md:text-xs font-black text-white uppercase tracking-wider">
-                   {userData.clubs || "CLUB"} LEADER
+                   {userData.community_name || "LEADER"}
                 </span>
               </div>
             )}
@@ -114,8 +138,9 @@ const Profile = () => {
             </ul>
           </div>
 
+          {/* --- UPDATED: COMMUNITY STATS WITH REAL DATA --- */}
           <div className="bg-white/5 p-4 md:p-6 rounded-2xl border border-white/10 backdrop-blur-sm">
-            <h3 className="text-slate-400 font-bold text-xs uppercase tracking-widest mb-4">Community Stats</h3>
+            <h3 className="text-slate-400 font-bold text-xs uppercase tracking-widest mb-4">Community Impact</h3>
             <div className="flex justify-between text-center gap-2">
               <div className="flex-1">
                 <div className="flex items-center justify-center gap-1 text-pink-500 mb-1"><Heart size={16} /></div>
@@ -123,9 +148,10 @@ const Profile = () => {
                 <div className="text-[9px] md:text-[10px] text-slate-500 uppercase">Likes</div>
               </div>
               <div className="flex-1">
-                <div className="flex items-center justify-center gap-1 text-blue-500 mb-1"><Users size={16} /></div>
-                <div className="font-black text-lg md:text-xl">{displayProfile.stats?.matches || 0}</div>
-                <div className="text-[9px] md:text-[10px] text-slate-500 uppercase">Matches</div>
+                <div className="flex items-center justify-center gap-1 text-blue-500 mb-1"><CheckCircle size={16} /></div>
+                {/* Real Verified Count */}
+                <div className="font-black text-lg md:text-xl text-blue-400">{tasksCompleted}</div>
+                <div className="text-[9px] md:text-[10px] text-slate-500 uppercase">Missions</div>
               </div>
               <div className="flex-1">
                 <div className="flex items-center justify-center gap-1 text-emerald-500 mb-1"><Eye size={16} /></div>

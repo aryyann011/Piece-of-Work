@@ -54,7 +54,7 @@ const Feedback = () => {
 
         try {
             const { error } = await supabase
-                .from('feedbacks')
+                .from('Feedback')
                 .insert([{
                     student_name: formData.name,
                     reg_id: formData.regId,

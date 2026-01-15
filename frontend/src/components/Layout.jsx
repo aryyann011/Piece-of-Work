@@ -112,6 +112,7 @@ const Layout = () => {
         }}>
           <nav style={{ display: "flex", flexDirection: "column", gap: "10px", flex: 1 }}>
             <NavItem to="/" icon={<Search size={20} />} label="Discover" isOpen={isSidebarOpen} />
+            <NavItem to="/community" icon={<Search size={20} />} label="Community" isOpen={isSidebarOpen} />
             <NavItem to="/chat" icon={<MessageSquare size={20} />} label="Chat Feed" isOpen={isSidebarOpen} />
             <NavItem to="/find" icon={<Users size={20} />} label="Find People" isOpen={isSidebarOpen} />
             <NavItem to="/requests" icon={<Users size={20} />} label="Friend requests" isOpen={isSidebarOpen} />

@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from "react";
 import CardStack from "../components/Cards/CardStack";
 import LightRays from "../components/effects/LightRays";
-import { Check, X, Settings2, Activity, Heart, Users, ShieldCheck } from "lucide-react"; 
+import { Check, X, Settings2 } from "lucide-react"; 
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/mainContext";
-import { collection, getDocs, doc, setDoc, getDoc, serverTimestamp, updateDoc, arrayUnion } from "firebase/firestore";
+import { collection, doc, setDoc, serverTimestamp, updateDoc, arrayUnion, onSnapshot } from "firebase/firestore";
 import { db } from "../conf/firebase";
 
 const Discovery = () => {
@@ -24,6 +24,7 @@ const Discovery = () => {
     const [showSidebar, setShowSidebar] = useState(false); 
 
     const DEFAULT_AVATAR = "https://cdn-icons-png.flaticon.com/512/149/149071.png";
+    const VOLUNTEER_ICON = "https://cdn-icons-png.flaticon.com/512/10699/10699392.png"; 
 
     useEffect(() => {
         const handleResize = () => {
@@ -33,43 +34,61 @@ const Discovery = () => {
         };
         window.addEventListener("resize", handleResize);
 
-        const fetchData = async () => {
-            setLoading(true);
-            try {
-                // Fetch Users with Role and Verification data
-                const userSnap = await getDocs(collection(db, "users"));
-                const userList = userSnap.docs.map(d => {
-                    const data = d.data();
-                    const rawPhoto = data.photoURL || data.photoUrl;
-                    return {
-                        uid: d.id,
-                        name: data.Name || data.name || "Unknown Student",
-                        branch: data.branch || data.DEPT || "",
-                        batch: data.batch || "",
-                        bio: data.BIO || data.bio || "",
-                        role: data.role || "student", // Pass role for badge
-                        regNo: data.regNo || "",     // Pass regNo for verified tick
-                        photoUrl: (rawPhoto && rawPhoto.trim() !== "") ? rawPhoto : DEFAULT_AVATAR, 
-                    };
-                }).filter(u => u.uid !== authUser?.uid);
-                setUsers(userList);
-
-                const activitySnap = await getDocs(collection(db, "activities"));
-                const activityList = activitySnap.docs.map(d => ({
+        // --- REAL TIME LISTENER (Updated for Image/Date) ---
+        const unsubUsers = onSnapshot(collection(db, "users"), (snap) => {
+            const userList = snap.docs.map(d => {
+                const data = d.data();
+                const rawPhoto = data.photoURL || data.photoUrl;
+                return {
                     uid: d.id,
-                    ...d.data(),
-                    isActivity: true 
-                }));
-                setActivities(activityList);
+                    name: data.Name || data.name || "Unknown Student",
+                    branch: data.branch || data.DEPT || "",
+                    batch: data.batch || "",
+                    bio: data.BIO || data.bio || "",
+                    role: data.role || "student", 
+                    regNo: data.regNo || "",     
+                    photoUrl: (rawPhoto && rawPhoto.trim() !== "") ? rawPhoto : DEFAULT_AVATAR, 
+                };
+            }).filter(u => u.uid !== authUser?.uid);
+            setUsers(userList);
+            setLoading(false);
+            
+            // Set filters
+            setAvailableBatches([...new Set(userList.map(u => u.batch).filter(Boolean))].sort());
+            setAvailableBranches([...new Set(userList.map(u => u.branch).filter(Boolean))].sort());
+        });
 
-                setAvailableBatches([...new Set(userList.map(u => u.batch).filter(Boolean))].sort());
-                setAvailableBranches([...new Set(userList.map(u => u.branch).filter(Boolean))].sort());
-            } catch (err) { console.error(err); } 
-            finally { setLoading(false); }
-        };
+        const unsubActivities = onSnapshot(collection(db, "activities"), (snap) => {
+            const activityList = snap.docs.map(d => {
+                const data = d.data();
+                
+                // Format Date nicely (e.g., "Jan 24")
+                let formattedDate = "Flexible";
+                if (data.event_date) {
+                    const dateObj = new Date(data.event_date);
+                    if (!isNaN(dateObj)) {
+                        formattedDate = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                    }
+                }
 
-        if (authUser) fetchData();
-        return () => window.removeEventListener("resize", handleResize);
+                return {
+                    uid: d.id,
+                    isActivity: true, 
+                    name: data.event_title,         
+                    bio: data.description,          
+                    branch: data.community_name,    
+                    
+                    // PASS THE DATE EXPLICITLY
+                    date: formattedDate,
+                    // Keep batch for backward compatibility if needed
+                    batch: formattedDate, 
+                    
+                    photoUrl: data.image_url || VOLUNTEER_ICON,       
+                    ...data 
+                };
+            });
+            setActivities(activityList);
+        });
     }, [authUser]);
 
     const showNotification = (msg, type) => {
@@ -79,14 +98,17 @@ const Discovery = () => {
 
     const handleSwipeAction = async (item) => {
         if (!authUser) return;
+        
         if (item.isActivity) {
+            // VOLUNTEER LOGIC
             try {
                 await updateDoc(doc(db, "activities", item.uid), {
                     volunteer_list: arrayUnion(authUser.uid)
                 });
-                showNotification(`Applied for ${item.event_title}!`, "success");
+                showNotification(`You volunteered for ${item.name}!`, "success");
             } catch (err) { console.error(err); }
         } else {
+            // SOCIAL LOGIC
             const requestId = `${authUser.uid}_${item.uid}`;
             try {
                 await setDoc(doc(db, "friend_requests", requestId), {
@@ -100,7 +122,7 @@ const Discovery = () => {
         }
     };
 
-    const handleSwipeReject = (item) => { console.log(`Skipped ${item.name || item.event_title}`); };
+    const handleSwipeReject = (item) => { console.log(`Skipped ${item.name}`); };
 
     const filteredItems = viewMode === "social" 
         ? users.filter(u => (!selectedBatch || u.batch === selectedBatch) && (!selectedBranch || u.branch === selectedBranch))
@@ -142,7 +164,7 @@ const Discovery = () => {
             }}>
                 {/* MODE TOGGLE */}
                 <div style={{ 
-                    position: "absolute", top: "20px", left: "50%", transform: "translateX(-50%)", 
+                    position: "absolute", top: "5px", left: "50%", transform: "translateX(-50%)", 
                     zIndex: 50, display: "flex", background: "rgba(0,0,0,0.4)", padding: "5px", borderRadius: "15px", backdropFilter: "blur(10px)"
                 }}>
                     <button 
@@ -167,18 +189,19 @@ const Discovery = () => {
                     {loading ? <p style={{ color: "#aaa" }}>Loading Campus...</p> : 
                      filteredItems.length > 0 ? (
                         <CardStack 
+                            key={viewMode} 
                             users={filteredItems} 
                             onSwipeDown={handleSwipeAction} 
                             onSwipeUp={handleSwipeReject} 
                         />
-                     ) : 
-                     <p style={{ color: "#777" }}>No {viewMode === "social" ? "students" : "activities"} found</p>}
+                      ) : 
+                      <p style={{ color: "#777" }}>No {viewMode === "social" ? "students" : "activities"} found</p>}
                 </div>
                 
                 <LightRays raysColor={viewMode === "social" ? "#05d9e8" : "#ff2a6d"} />
             </div>
 
-            {/* SIDEBAR */}
+            {/* SIDEBAR (Desktop Only) */}
             {!isMobile && (
                 <div style={{ width: "350px", display: "flex", flexDirection: "column", gap: "20px" }}>
                     <div className="dashboard-card" style={{ padding: "15px" }}>
@@ -202,10 +225,11 @@ const Discovery = () => {
             )}
 
             {/* Lead Dashboard FAB */}
-            {userData?.role === "club_lead" && (
+            {userData?.role === "community_leader" && (
                 <button 
                     onClick={() => navigate("/club-leader")}
                     className="fixed bottom-24 right-8 bg-blue-600 p-4 rounded-full shadow-2xl z-50 animate-pulse"
+                    title="Open Leader Dashboard"
                 >
                     <Settings2 color="white" />
                 </button>
